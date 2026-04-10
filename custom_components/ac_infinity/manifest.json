@@ -6,6 +6,10 @@
     {
       "connectable": true,
       "manufacturer_id": 2306
+    },
+    {
+      "connectable": true,
+      "local_name": "BLE_FAN*"
     }
   ],
   "codeowners": [

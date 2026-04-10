@@ -19,8 +19,29 @@ from homeassistant.data_entry_flow import FlowResult
 
 from .const import BLEAK_EXCEPTIONS, DOMAIN
 
+# BLE local names used by AC Infinity devices (e.g. AirTap)
+AC_INFINITY_NAMES = ("BLE_FAN",)
 
 _LOGGER = logging.getLogger(__name__)
+
+
+def _is_ac_infinity_device(discovery: BluetoothServiceInfoBleak) -> bool:
+    """Check if a discovered BLE device is an AC Infinity device."""
+    if MANUFACTURER_ID in discovery.advertisement.manufacturer_data:
+        return True
+    if discovery.name and discovery.name.startswith(AC_INFINITY_NAMES):
+        return True
+    return False
+
+
+def _get_device_display_name(service_info: BluetoothServiceInfoBleak) -> str:
+    """Get a display name for the device."""
+    if MANUFACTURER_ID in service_info.advertisement.manufacturer_data:
+        device = parse_manufacturer_data(
+            service_info.advertisement.manufacturer_data[MANUFACTURER_ID]
+        )
+        return device.name
+    return service_info.name or "AC Infinity"
 
 
 class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -40,10 +61,8 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         await self.async_set_unique_id(discovery_info.address)
         self._abort_if_unique_id_configured()
         self._discovery_info = discovery_info
-        device: DeviceInfo = parse_manufacturer_data(
-            discovery_info.advertisement.manufacturer_data[MANUFACTURER_ID]
-        )
-        self.context["title_placeholders"] = {"name": device.name}
+        name = _get_device_display_name(discovery_info)
+        self.context["title_placeholders"] = {"name": name}
         return await self.async_step_user()
 
     async def async_step_user(
@@ -71,15 +90,21 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 errors["base"] = "unknown"
             else:
                 await controller.stop()
+                # Build service data - use manufacturer data if available,
+                # otherwise store basic device info
+                if MANUFACTURER_ID in discovery_info.advertisement.manufacturer_data:
+                    service_data = parse_manufacturer_data(
+                        discovery_info.advertisement.manufacturer_data[MANUFACTURER_ID]
+                    )
+                else:
+                    service_data = DeviceInfo(
+                        name=controller.name or discovery_info.name or "AC Infinity",
+                    )
                 return self.async_create_entry(
                     title=controller.name,
                     data={
                         CONF_ADDRESS: discovery_info.address,
-                        CONF_SERVICE_DATA: parse_manufacturer_data(
-                            discovery_info.advertisement.manufacturer_data[
-                                MANUFACTURER_ID
-                            ]
-                        ),
+                        CONF_SERVICE_DATA: service_data,
                     },
                 )
 
@@ -91,7 +116,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 if (
                     discovery.address in current_addresses
                     or discovery.address in self._discovered_devices
-                    or MANUFACTURER_ID not in discovery.advertisement.manufacturer_data
+                    or not _is_ac_infinity_device(discovery)
                 ):
                     continue
                 self._discovered_devices[discovery.address] = discovery
@@ -101,10 +126,8 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         devices = {}
         for service_info in self._discovered_devices.values():
-            device = parse_manufacturer_data(
-                service_info.advertisement.manufacturer_data[MANUFACTURER_ID]
-            )
-            devices[service_info.address] = f"{device.name} ({service_info.address})"
+            name = _get_device_display_name(service_info)
+            devices[service_info.address] = f"{name} ({service_info.address})"
 
         data_schema = vol.Schema(
             {
