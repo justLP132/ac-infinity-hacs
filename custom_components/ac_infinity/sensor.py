@@ -36,7 +36,7 @@ async def async_setup_entry(
         TemperatureSensor(data.coordinator, data.device, entry.title),
         HumiditySensor(data.coordinator, data.device, entry.title),
     ]
-    if data.device.state.version >= 3 and data.device.state.type in [7, 9, 11, 12]:
+    if data.device.state.version >= 3 and data.device.state.type in [6, 7, 9, 11, 12]:
         entities.append(VpdSensor(data.coordinator, data.device, entry.title))
     async_add_entities(entities)
 
