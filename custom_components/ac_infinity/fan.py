@@ -45,9 +45,9 @@ class ACInfinityFan(
     """Representation of AC Infinity sensor."""
 
     _attr_speed_count = int_states_in_range(SPEED_RANGE)
-    _attr_supported_features = (
-        FanEntityFeature.SET_SPEED | FanEntityFeature.TURN_ON | FanEntityFeature.TURN_OFF
-    )
+    _attr_supported_features = FanEntityFeature.SET_SPEED | getattr(
+        FanEntityFeature, "TURN_ON", 0
+    ) | getattr(FanEntityFeature, "TURN_OFF", 0)
 
     def __init__(
         self,

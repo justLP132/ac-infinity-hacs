@@ -91,6 +91,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 if (
                     discovery.address in current_addresses
                     or discovery.address in self._discovered_devices
+                    or MANUFACTURER_ID not in discovery.advertisement.manufacturer_data
                 ):
                     continue
                 self._discovered_devices[discovery.address] = discovery
