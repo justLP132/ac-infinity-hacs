@@ -78,9 +78,23 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 discovery_info.address, raise_on_progress=False
             )
             self._abort_if_unique_id_configured()
-            controller = ACInfinityController(
-                discovery_info.device, advertisement_data=discovery_info.advertisement
-            )
+            has_mfr_data = MANUFACTURER_ID in discovery_info.advertisement.manufacturer_data
+            if has_mfr_data:
+                controller = ACInfinityController(
+                    discovery_info.device,
+                    advertisement_data=discovery_info.advertisement,
+                )
+            else:
+                # AirTap devices don't advertise manufacturer_data;
+                # create controller with a minimal DeviceInfo instead.
+                controller = ACInfinityController(
+                    discovery_info.device,
+                    state=DeviceInfo(
+                        type=6,
+                        name=discovery_info.name or "BLE_FAN",
+                        version=1,
+                    ),
+                )
             try:
                 await controller.update()
             except BLEAK_EXCEPTIONS:
@@ -90,15 +104,15 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 errors["base"] = "unknown"
             else:
                 await controller.stop()
-                # Build service data - use manufacturer data if available,
-                # otherwise store basic device info
-                if MANUFACTURER_ID in discovery_info.advertisement.manufacturer_data:
+                if has_mfr_data:
                     service_data = parse_manufacturer_data(
                         discovery_info.advertisement.manufacturer_data[MANUFACTURER_ID]
                     )
                 else:
                     service_data = DeviceInfo(
+                        type=controller.state.type if controller.state else 6,
                         name=controller.name or discovery_info.name or "AC Infinity",
+                        version=controller.state.version if controller.state else 1,
                     )
                 return self.async_create_entry(
                     title=controller.name,
